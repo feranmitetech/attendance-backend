@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { Router } from 'express'
-import { authenticate, authorize } from '../middleware/auth.js'
+import { authenticate, authorize, checkSubscription } from '../middleware/auth.js'
 
 import { register, login, me } from '../controllers/auth.controller.js'
 import { listStudents, getStudent, createStudent, updateStudent, getQRCode } from '../controllers/students.controller.js'
@@ -15,17 +15,17 @@ router.post('/auth/login', login)
 router.get('/auth/me', authenticate, me)
 
 // ── Classes ───────────────────────────────────────────
-router.get('/classes', authenticate, listClasses)
-router.post('/classes', authenticate, authorize('admin'), createClass)
-router.patch('/classes/:id', authenticate, authorize('admin'), updateClass)
-router.delete('/classes/:id', authenticate, authorize('admin'), deleteClass)
+router.get('/classes', authenticate, checkSubscription, listClasses)
+router.post('/classes', authenticate, checkSubscription, authorize('admin'), createClass)
+router.patch('/classes/:id', authenticate, checkSubscription, authorize('admin'), updateClass)
+router.delete('/classes/:id', authenticate, checkSubscription, authorize('admin'), deleteClass)
 
 // ── Students ──────────────────────────────────────────
-router.get('/students', authenticate, listStudents)
-router.get('/students/:id', authenticate, getStudent)
-router.post('/students', authenticate, authorize('admin'), createStudent)
-router.patch('/students/:id', authenticate, authorize('admin'), updateStudent)
-router.get('/students/:id/qr', authenticate, getQRCode)
+router.get('/students', authenticate, checkSubscription, listStudents)
+router.get('/students/:id', authenticate, checkSubscription, getStudent)
+router.post('/students', authenticate, checkSubscription, authorize('admin'), createStudent)
+router.patch('/students/:id', authenticate, checkSubscription, authorize('admin'), updateStudent)
+router.get('/students/:id/qr', authenticate, checkSubscription, getQRCode)
 router.delete('/students/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
     console.log('Deleting student:', req.params.id, 'for school:', req.user.school_id)
@@ -64,15 +64,15 @@ router.delete('/students/:id', authenticate, authorize('admin'), async (req, res
 
 // ── Attendance ────────────────────────────────────────
 // Kiosk check-in (admin + teacher can trigger)
-router.post('/attendance/checkin', authenticate, checkin)
+router.post('/attendance/checkin', authenticate, checkSubscription, checkin)
 // Mark all no-shows as absent (admin only, triggered at 8:15 AM)
-router.post('/attendance/mark-absent', authenticate, authorize('admin'), markAbsent)
+router.post('/attendance/mark-absent', authenticate, checkSubscription, authorize('admin'), markAbsent)
 // View records
-router.get('/attendance', authenticate, listAttendance)
-router.get('/attendance/summary', authenticate, summary)
+router.get('/attendance', authenticate, checkSubscription, listAttendance)
+router.get('/attendance/summary', authenticate, checkSubscription, summary)
 
 // SMS logs
-router.get('/sms-logs', authenticate, async (req, res) => {
+router.get('/sms-logs', authenticate, checkSubscription, async (req, res) => {
   const { data, error } = await supabase
     .from('sms_logs')
     .select('*, students(name)')
