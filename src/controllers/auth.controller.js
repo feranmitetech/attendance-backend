@@ -38,11 +38,20 @@ export async function register(req, res) {
   }
 
   // Create school
-  const { data: school, error: schoolError } = await supabase
-    .from('schools')
-    .insert({ name: schoolName, subdomain, contact_email: email })
-    .select()
-    .single()
+  const trialEndsAt = new Date()
+trialEndsAt.setDate(trialEndsAt.getDate() + 14)
+
+const { data: school, error: schoolError } = await supabase
+  .from('schools')
+  .insert({ 
+    name: schoolName, 
+    subdomain, 
+    contact_email: email,
+    trial_ends_at: trialEndsAt.toISOString(),
+    status: 'trial'
+  })
+  .select()
+  .single()
 
   if (schoolError) {
     return res.status(500).json({ error: 'Failed to create school' })
