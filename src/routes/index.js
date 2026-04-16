@@ -145,4 +145,33 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
   }
 })
 
+// ── School settings ───────────────────────────────────
+router.get('/settings', authenticate, authorize('admin'), async (req, res) => {
+  const { data, error } = await supabase
+    .from('schools')
+    .select('name, subdomain, contact_email, termii_api_key, termii_sender_id, trial_ends_at, status')
+    .eq('id', req.user.school_id)
+    .single()
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json(data)
+})
+
+router.patch('/settings', authenticate, authorize('admin'), async (req, res) => {
+  const allowed = ['termii_api_key', 'termii_sender_id', 'name', 'contact_email']
+  const updates = Object.fromEntries(
+    Object.entries(req.body).filter(([k]) => allowed.includes(k))
+  )
+
+  const { data, error } = await supabase
+    .from('schools')
+    .update(updates)
+    .eq('id', req.user.school_id)
+    .select()
+    .single()
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json(data)
+})
+
 export default router
