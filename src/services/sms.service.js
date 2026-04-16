@@ -6,11 +6,18 @@ function formatPhone(phone) {
   return clean.startsWith('+') ? clean.replace('+', '') : `234${clean}`
 }
 
+async function getSchoolSMSConfig(schoolId) {
+  const { data } = await supabase
+    .from('schools')
+    .select('termii_api_key, termii_sender_id')
+    .eq('id', schoolId)
+    .single()
+  return data
+}
+
 async function sendSMS(student, message) {
-  console.log('Sender ID being used:', process.env.TERMII_SENDER_ID)
   const recipient = formatPhone(student.parent_phone)
 
-  // Insert log first and get its ID
   const { data: logRow } = await supabase
     .from('sms_logs')
     .insert({
@@ -22,18 +29,29 @@ async function sendSMS(student, message) {
     })
     .select()
     .single()
-    
+
   try {
+    // Get this school's own Termii credentials
+    const config = await getSchoolSMSConfig(student.school_id)
+
+    if (!config?.termii_api_key || !config?.termii_sender_id) {
+      console.log(`SMS skipped for ${student.name} — school has not configured SMS settings`)
+      if (logRow) {
+        await supabase.from('sms_logs').update({ status: 'not_configured' }).eq('id', logRow.id)
+      }
+      return
+    }
+
     const response = await fetch('https://v3.api.termii.com/api/sms/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         to: recipient,
-        from: process.env.TERMII_SENDER_ID,
+        from: config.termii_sender_id,
         sms: message,
         type: 'plain',
         channel: 'generic',
-        api_key: process.env.TERMII_API_KEY,
+        api_key: config.termii_api_key,
       }),
     })
 
@@ -50,10 +68,7 @@ async function sendSMS(student, message) {
 
   } catch (err) {
     if (logRow) {
-      await supabase
-        .from('sms_logs')
-        .update({ status: 'failed' })
-        .eq('id', logRow.id)
+      await supabase.from('sms_logs').update({ status: 'failed' }).eq('id', logRow.id)
     }
     console.error(`SMS failed for ${student.name}:`, err.message)
   }
