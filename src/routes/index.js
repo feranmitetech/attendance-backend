@@ -85,21 +85,40 @@ router.get('/sms-logs', authenticate, checkSubscription, async (req, res) => {
 })
 
 // ── Users / Teachers ──────────────────────────────────
-router.get('/users', authenticate, authorize('admin'), async (req, res) => {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id, name, email, role, created_at')
-    .eq('school_id', req.user.school_id)
-    .order('name')
-
-  if (error) return res.status(500).json({ error: error.message })
-  return res.json(data)
-})
-
 router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   const { name, email, password, role } = req.body
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email and password are required' })
+  }
+
+  const STAFF_LIMITS = {
+    trial: 2, starter: 3, growth: 10, enterprise: Infinity
+  }
+
+  // Get school plan
+  const { data: school } = await supabase
+    .from('schools')
+    .select('plan')
+    .eq('id', req.user.school_id)
+    .single()
+
+  const plan = school?.plan || 'trial'
+  const limit = STAFF_LIMITS[plan]
+
+  // Count existing staff
+  const { count: staffCount } = await supabase
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('school_id', req.user.school_id)
+    .neq('id', req.user.id) // exclude the admin themselves
+
+  if (staffCount >= limit) {
+    return res.status(403).json({
+      error: 'staff_limit_reached',
+      message: `Your ${plan} plan allows up to ${limit} staff accounts. Please upgrade to add more.`,
+      limit,
+      current: staffCount,
+    })
   }
 
   const bcrypt = await import('bcryptjs')
@@ -109,8 +128,7 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
     .from('users')
     .insert({
       school_id: req.user.school_id,
-      name,
-      email,
+      name, email,
       password_hash: passwordHash,
       role: role || 'teacher',
     })
