@@ -47,6 +47,13 @@ export async function getStudent(req, res) {
 
 // POST /api/students
 // Enrolls a new student and generates their QR code
+const PLAN_LIMITS = {
+  trial:      { students: 50,   staff: 2 },
+  starter:    { students: 500,  staff: 3 },
+  growth:     { students: 2000, staff: 10 },
+  enterprise: { students: Infinity, staff: Infinity },
+}
+
 export async function createStudent(req, res) {
   const parsed = studentSchema.safeParse(req.body)
   if (!parsed.success) {
@@ -54,13 +61,39 @@ export async function createStudent(req, res) {
   }
 
   const schoolId = req.user.school_id
-  const studentCode = generateStudentCode()
-  const qrPayload = `${schoolId}:${studentCode}` // format: schoolId:studentCode
 
-  // Generate QR code as a base64 PNG data URL
+  // Get school plan
+  const { data: school } = await supabase
+    .from('schools')
+    .select('plan')
+    .eq('id', schoolId)
+    .single()
+
+  const plan = school?.plan || 'trial'
+  const limits = PLAN_LIMITS[plan]
+
+  // Count existing active students
+  const { count: studentCount } = await supabase
+    .from('students')
+    .select('*', { count: 'exact', head: true })
+    .eq('school_id', schoolId)
+    .eq('active', true)
+
+  if (studentCount >= limits.students) {
+    return res.status(403).json({
+      error: 'student_limit_reached',
+      message: `Your ${plan} plan allows up to ${limits.students} students. Please upgrade to enroll more students.`,
+      limit: limits.students,
+      current: studentCount,
+    })
+  }
+
+  // Continue with enrollment
+  const studentCode = generateStudentCode()
+  const qrPayload = `${schoolId}:${studentCode}`
+
   const qrCode = await QRCode.toDataURL(qrPayload, {
-    width: 300,
-    margin: 2,
+    width: 300, margin: 2,
     color: { dark: '#000000', light: '#FFFFFF' },
   })
 
@@ -80,7 +113,6 @@ export async function createStudent(req, res) {
     .single()
 
   if (error) return res.status(500).json({ error: error.message })
-
   return res.status(201).json({ ...data, qr_image: qrCode })
 }
 
