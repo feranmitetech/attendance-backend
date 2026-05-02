@@ -14,6 +14,9 @@ app.use(helmet())
 // ── CORS — allow only the frontend origin ─────────────
 app.use(cors({
   origin: [
+    'https://attendease.com.ng',
+    'https://www.attendease.com.ng',
+    'https://app.attendease.com.ng',
     'https://attendance-frontend-gamma.vercel.app',
     'http://localhost:5173',
   ],
