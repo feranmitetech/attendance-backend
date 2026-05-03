@@ -12,6 +12,15 @@ const checkinSchema = z.object({
   status: z.enum(['present', 'absent', 'late']).optional(),
 })
 
+// Get current Nigeria time for late check
+function getNigeriaTime() {
+  return new Date().toLocaleTimeString('en-NG', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'Africa/Lagos',
+    hour12: false,
+  })
+}
+
 const LATE_CUTOFF = '08:15:00' // students arriving after this are marked late
 
 // POST /api/attendance/checkin
@@ -25,8 +34,8 @@ export async function checkin(req, res) {
   const { method, qr_code, student_id, status: manualStatus } = parsed.data
   const schoolId = req.user.school_id
   const today = new Date().toISOString().split('T')[0]
-  const now = new Date().toTimeString().split(' ')[0] // HH:MM:SS
-
+  const now = getNigeriaTime()
+  
   // Resolve student from QR code or direct ID
   let student
   if (method === 'qr' && qr_code) {
