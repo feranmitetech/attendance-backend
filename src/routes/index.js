@@ -87,6 +87,17 @@ router.get('/sms-logs', authenticate, checkSubscription, async (req, res) => {
 })
 
 // ── Users / Teachers ──────────────────────────────────
+router.get('/users', authenticate, authorize('admin'), async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, name, email, role, created_at')
+    .eq('school_id', req.user.school_id)
+    .order('name')
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json(data)
+})
+
 router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   const { name, email, password, role } = req.body
   if (!name || !email || !password) {
@@ -97,7 +108,6 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
     trial: 2, starter: 3, growth: 10, enterprise: Infinity
   }
 
-  // Get school plan
   const { data: school } = await supabase
     .from('schools')
     .select('plan')
@@ -107,12 +117,11 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   const plan = school?.plan || 'trial'
   const limit = STAFF_LIMITS[plan]
 
-  // Count existing staff
   const { count: staffCount } = await supabase
     .from('users')
     .select('*', { count: 'exact', head: true })
     .eq('school_id', req.user.school_id)
-    .neq('id', req.user.id) // exclude the admin themselves
+    .neq('id', req.user.id)
 
   if (staffCount >= limit) {
     return res.status(403).json({
@@ -139,6 +148,27 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message })
   return res.status(201).json(data)
+})
+
+router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
+  try {
+    await supabase
+      .from('classes')
+      .update({ teacher_id: null })
+      .eq('teacher_id', req.params.id)
+      .eq('school_id', req.user.school_id)
+
+    const { error } = await supabase
+      .from('users')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('school_id', req.user.school_id)
+
+    if (error) return res.status(500).json({ error: error.message })
+    return res.json({ message: 'User removed' })
+  } catch (err) {
+    return res.status(500).json({ error: err.message })
+  }
 })
 
 router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
