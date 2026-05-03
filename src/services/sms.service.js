@@ -77,6 +77,7 @@ async function sendSMS(student, message) {
 export async function sendAbsenceAlert(student) {
   const today = new Date().toLocaleDateString('en-NG', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'Africa/Lagos',
   })
   const message =
     `Dear Parent, your ward ${student.name} was absent from school today, ${today}. ` +
@@ -85,12 +86,18 @@ export async function sendAbsenceAlert(student) {
 }
 
 export async function sendLateAlert(student, time) {
-  const displayTime = time.slice(0, 5)
+  const nigeriaTime = new Date().toLocaleTimeString('en-NG', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Africa/Lagos',
+    hour12: false,
+  })
   const today = new Date().toLocaleDateString('en-NG', {
     day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'Africa/Lagos',
   })
   const message =
-    `Dear Parent, your ward ${student.name} arrived late at school at ${displayTime} on ${today}. ` +
+    `Dear Parent, your ward ${student.name} arrived late at school at ${nigeriaTime} on ${today}. ` +
     `Please ensure timely arrival. Thank you.`
   return sendSMS(student, message)
 }
