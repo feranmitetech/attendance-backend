@@ -2,15 +2,21 @@ import { supabase } from '../config/supabase.js'
 import crypto from 'crypto'
 
 const PLAN_CODES = {
-  starter: process.env.PAYSTACK_STARTER_PLAN,
-  growth: process.env.PAYSTACK_GROWTH_PLAN,
-  enterprise: process.env.PAYSTACK_ENTERPRISE_PLAN,
+  starter_monthly: process.env.PAYSTACK_STARTER_PLAN,
+  growth_monthly: process.env.PAYSTACK_GROWTH_PLAN,
+  enterprise_monthly: process.env.PAYSTACK_ENTERPRISE_PLAN,
+  starter_term: process.env.PAYSTACK_STARTER_TERM_PLAN,
+  growth_term: process.env.PAYSTACK_GROWTH_TERM_PLAN,
+  enterprise_term: process.env.PAYSTACK_ENTERPRISE_TERM_PLAN,
 }
 
 const PLAN_NAMES = {
   [process.env.PAYSTACK_STARTER_PLAN]: 'starter',
   [process.env.PAYSTACK_GROWTH_PLAN]: 'growth',
   [process.env.PAYSTACK_ENTERPRISE_PLAN]: 'enterprise',
+  [process.env.PAYSTACK_STARTER_TERM_PLAN]: 'starter',
+  [process.env.PAYSTACK_GROWTH_TERM_PLAN]: 'growth',
+  [process.env.PAYSTACK_ENTERPRISE_TERM_PLAN]: 'enterprise',
 }
 
 async function paystackRequest(path, method = 'GET', body = null) {
