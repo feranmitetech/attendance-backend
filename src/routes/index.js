@@ -326,4 +326,95 @@ router.patch('/auth/change-password', authenticate, async (req, res) => {
   return res.json({ message: 'Password changed successfully' })
 })
 
+// Forgot password — sends reset email
+router.post('/auth/forgot-password', async (req, res) => {
+  const { email } = req.body
+  if (!email) return res.status(400).json({ error: 'Email is required' })
+
+  // Check if user exists
+  const { data: user } = await supabase
+    .from('users')
+    .select('id, name, email')
+    .eq('email', email)
+    .single()
+
+  // Always return success even if email not found (security best practice)
+  if (!user) return res.json({ message: 'If this email exists you will receive a reset link' })
+
+  // Generate reset token
+  const { randomBytes } = await import('crypto')
+  const token = randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000) // 1 hour
+
+  // Store token
+  await supabase.from('password_resets').insert({
+    email,
+    token,
+    expires_at: expiresAt.toISOString(),
+  })
+
+  // Send reset email via fetch to a simple email service
+  const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`
+
+  console.log(`Password reset link for ${email}: ${resetUrl}`)
+
+  // For now log the URL — we'll add email sending next
+  // TODO: Send email with resetUrl
+
+  return res.json({ message: 'If this email exists you will receive a reset link', resetUrl })
+})
+
+// Reset password with token
+router.post('/auth/reset-password', async (req, res) => {
+  const { token, new_password } = req.body
+
+  if (!token || !new_password) {
+    return res.status(400).json({ error: 'Token and new password are required' })
+  }
+
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' })
+  }
+
+  // Find valid token
+  const { data: reset } = await supabase
+    .from('password_resets')
+    .select('*')
+    .eq('token', token)
+    .eq('used', false)
+    .single()
+
+  if (!reset) return res.status(400).json({ error: 'Invalid or expired reset link' })
+
+  if (new Date() > new Date(reset.expires_at)) {
+    return res.status(400).json({ error: 'Reset link has expired. Please request a new one.' })
+  }
+
+  // Find user
+  const { data: user } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', reset.email)
+    .single()
+
+  if (!user) return res.status(404).json({ error: 'User not found' })
+
+  // Update password
+  const bcrypt = await import('bcryptjs')
+  const newHash = await bcrypt.default.hash(new_password, 12)
+
+  await supabase
+    .from('users')
+    .update({ password_hash: newHash })
+    .eq('id', user.id)
+
+  // Mark token as used
+  await supabase
+    .from('password_resets')
+    .update({ used: true })
+    .eq('token', token)
+
+  return res.json({ message: 'Password reset successfully. You can now log in.' })
+})
+
 export default router
