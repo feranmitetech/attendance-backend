@@ -231,4 +231,59 @@ router.post('/payments/initialize', authenticate, checkSubscription, initializeP
 router.get('/payments/status', authenticate, getStatus)
 router.post('/payments/cancel', authenticate, authorize('admin'), cancelSubscription)
 
+// ── Staff attendance ──────────────────────────────────
+router.post('/staff/checkin', authenticate, async (req, res) => {
+  const today = new Date().toISOString().split('T')[0]
+  const now = new Date().toLocaleTimeString('en-NG', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    timeZone: 'Africa/Lagos', hour12: false,
+  })
+
+  // Check if already checked in
+  const { data: existing } = await supabase
+    .from('staff_attendance')
+    .select('id')
+    .eq('user_id', req.user.id)
+    .eq('date', today)
+    .single()
+
+  if (existing) {
+    return res.status(409).json({ error: 'Already checked in today' })
+  }
+
+  const { error } = await supabase
+    .from('staff_attendance')
+    .insert({
+      user_id: req.user.id,
+      school_id: req.user.school_id,
+      date: today,
+      check_in_time: now,
+      status: 'present',
+    })
+
+  if (error) return res.status(500).json({ error: error.message })
+
+  return res.json({
+    message: 'Checked in successfully',
+    name: req.user.name,
+    time: now,
+  })
+})
+
+router.get('/staff/attendance', authenticate, async (req, res) => {
+  const today = new Date().toISOString().split('T')[0]
+  const { date } = req.query
+  const targetDate = date || today
+
+  const { data, error } = await supabase
+    .from('staff_attendance')
+    .select('*, users(name, email, role)')
+    .eq('school_id', req.user.school_id)
+    .eq('date', targetDate)
+    .order('check_in_time', { ascending: true })
+
+  if (error) return res.status(500).json({ error: error.message })
+  return res.json(data)
+})
+
 export default router
