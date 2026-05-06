@@ -24,7 +24,7 @@ app.use(cors({
 }))
 
 // ── Body parser ───────────────────────────────────────
-app.use(express.json({ limit: '5mb' })) // 5mb for base64 photo uploads
+app.use(express.json({ limit: '15mb' })) // 15mb for base64 photo uploads
 
 // ── Rate limiting ─────────────────────────────────────
 // Auth routes: 20 requests per 15 minutes (prevents brute force)
