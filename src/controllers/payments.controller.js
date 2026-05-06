@@ -53,10 +53,19 @@ export async function initializePayment(req, res) {
   const email = school.contact_email
   const planCode = PLAN_CODES[plan]
 
+  const AMOUNTS = {
+  starter_monthly: 1500000,
+  growth_monthly: 3000000,
+  enterprise_monthly: 6000000,
+  starter_term: 3825000,
+  growth_term: 7650000,
+  enterprise_term: 15300000,
+}
+  
   // Initialize transaction with Paystack
   const response = await paystackRequest('/transaction/initialize', 'POST', {
     email,
-    amount: plan === 'starter' ? 1500000 : plan === 'growth' ? 3000000 : 6000000, // in kobo
+    amount: AMOUNTS[plan] || 1500000,
     plan: planCode,
     metadata: {
       school_id: schoolId,
@@ -99,9 +108,19 @@ export async function webhook(req, res) {
 
     if (!schoolId) return res.sendStatus(200)
 
-    // Activate the school's subscription
+   // In webhook charge.success handler
+    const isTermPlan = plan?.plan_code && [
+      process.env.PAYSTACK_STARTER_TERM_PLAN,
+      process.env.PAYSTACK_GROWTH_TERM_PLAN,
+      process.env.PAYSTACK_ENTERPRISE_TERM_PLAN
+    ].includes(plan.plan_code)
+
     const subscriptionEnd = new Date()
-    subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 1)
+    if (isTermPlan) {
+      subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 3)
+    } else {
+      subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 1)
+    }
 
     await supabase
       .from('schools')
