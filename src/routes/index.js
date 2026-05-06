@@ -286,4 +286,44 @@ router.get('/staff/attendance', authenticate, async (req, res) => {
   return res.json(data)
 })
 
+// Change password
+router.patch('/auth/change-password', authenticate, async (req, res) => {
+  const { current_password, new_password } = req.body
+
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'Current and new password are required' })
+  }
+
+  if (new_password.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' })
+  }
+
+  // Get user with password hash
+  const { data: user } = await supabase
+    .from('users')
+    .select('password_hash')
+    .eq('id', req.user.id)
+    .single()
+
+  if (!user) return res.status(404).json({ error: 'User not found' })
+
+  // Verify current password
+  const bcrypt = await import('bcryptjs')
+  const valid = await bcrypt.default.compare(current_password, user.password_hash)
+
+  if (!valid) {
+    return res.status(401).json({ error: 'Current password is incorrect' })
+  }
+
+  // Hash new password
+  const newHash = await bcrypt.default.hash(new_password, 12)
+
+  await supabase
+    .from('users')
+    .update({ password_hash: newHash })
+    .eq('id', req.user.id)
+
+  return res.json({ message: 'Password changed successfully' })
+})
+
 export default router
