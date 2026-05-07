@@ -7,7 +7,7 @@ const studentSchema = z.object({
   name: z.string().min(2),
   class_id: z.string().uuid(),
   parent_phone: z.string().min(10),
-  photo_url: z.string().url().optional(),
+  photo_url: z.string().optional(),
   face_descriptor: z.array(z.number()).optional(), // 128-number array from face-api.js
 })
 
