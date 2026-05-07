@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase.js'
 import { sendAbsenceAlert, sendLateAlert } from '../services/sms.service.js'
+import { sendAbsenceAlert, sendLateAlert, sendCheckoutAlert } from '../services/sms.service.js'
 import { z } from 'zod'
 
 const checkinSchema = z.object({
@@ -10,6 +11,12 @@ const checkinSchema = z.object({
   student_id: z.string().uuid().optional(),
   // Manual override: student_id + status
   status: z.enum(['present', 'absent', 'late']).optional(),
+})
+
+const checkoutSchema = z.object({
+  method: z.enum(['qr', 'face']),
+  qr_code: z.string().optional(),
+  student_id: z.string().uuid().optional(),
 })
 
 // Get current Nigeria time for late check
@@ -212,5 +219,86 @@ export async function summary(req, res) {
     ...counts,
     not_yet_recorded: (total || 0) - records?.length,
     percentage: total ? Math.round(((counts.present + counts.late) / total) * 100) : 0,
+  })
+}
+
+// POST /api/attendance/checkout
+// Called by kiosk when student scans QR or is recognised by face on the way out
+export async function checkout(req, res) {
+  const parsed = checkoutSchema.safeParse(req.body)
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten().fieldErrors })
+  }
+
+  const { method, qr_code, student_id } = parsed.data
+  const schoolId = req.user.school_id
+  const today = new Date().toISOString().split('T')[0]
+  const now = getNigeriaTime() // reuses your existing helper
+
+  // Resolve student
+  let student
+  if (method === 'qr' && qr_code) {
+    const { data } = await supabase
+      .from('students')
+      .select('id, name, parent_phone, class_id')
+      .eq('qr_code', qr_code)
+      .eq('school_id', schoolId)
+      .eq('active', true)
+      .single()
+    student = data
+  } else if (student_id) {
+    const { data } = await supabase
+      .from('students')
+      .select('id, name, parent_phone, class_id')
+      .eq('id', student_id)
+      .eq('school_id', schoolId)
+      .eq('active', true)
+      .single()
+    student = data
+  }
+
+  if (!student) {
+    return res.status(404).json({ error: 'Student not found or not enrolled in this school' })
+  }
+
+  // Must have checked in today before checking out
+  const { data: record } = await supabase
+    .from('attendance')
+    .select('id, status, checked_out, check_out_time')
+    .eq('student_id', student.id)
+    .eq('date', today)
+    .single()
+
+  if (!record) {
+    return res.status(409).json({ error: 'Student has not checked in today' })
+  }
+
+  if (record.checked_out) {
+    return res.status(409).json({
+      error: 'Student has already checked out',
+      check_out_time: record.check_out_time,
+    })
+  }
+
+  // Update the existing attendance row with checkout info
+  const { data: updated, error } = await supabase
+    .from('attendance')
+    .update({
+      check_out_time: now,
+      checked_out: true,
+    })
+    .eq('id', record.id)
+    .select()
+    .single()
+
+  if (error) return res.status(500).json({ error: error.message })
+
+  // Always send checkout SMS (non-blocking)
+  sendCheckoutAlert({ ...student, school_id: schoolId }, now).catch(console.error)
+
+  return res.status(200).json({
+    student: { id: student.id, name: student.name },
+    check_out_time: now,
+    method,
   })
 }
