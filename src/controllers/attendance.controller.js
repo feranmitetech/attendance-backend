@@ -1,5 +1,4 @@
 import { supabase } from '../config/supabase.js'
-import { sendAbsenceAlert, sendLateAlert } from '../services/sms.service.js'
 import { sendAbsenceAlert, sendLateAlert, sendCheckoutAlert } from '../services/sms.service.js'
 import { z } from 'zod'
 
