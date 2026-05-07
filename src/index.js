@@ -6,6 +6,9 @@ import rateLimit from 'express-rate-limit'
 import routes from './routes/index.js'
 
 const app = express()
+
+// ✅ FIX: Tell Express to trust Railway's proxy (fixes rate-limit crash)
+app.set('trust proxy', 1)
 const PORT = process.env.PORT || 4000
 
 // ── Security headers ──────────────────────────────────
