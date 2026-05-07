@@ -52,6 +52,9 @@ const PLAN_LIMITS = {
   starter:    { students: 500,  staff: 3 },
   growth:     { students: 2000, staff: 10 },
   enterprise: { students: Infinity, staff: Infinity },
+  // safety fallbacks for any unexpected plan values
+  free:       { students: 50,   staff: 2 },
+  active:     { students: 500,  staff: 3 },
 }
 
 export async function createStudent(req, res) {
@@ -69,7 +72,8 @@ export async function createStudent(req, res) {
     .eq('id', schoolId)
     .single()
 
-  const plan = school?.plan || 'trial'
+  // ✅ FIX: fallback to 'trial' if plan is null/undefined/unrecognised
+  const plan = school?.plan && PLAN_LIMITS[school.plan] ? school.plan : 'trial'
   const limits = PLAN_LIMITS[plan]
 
   // Count existing active students
