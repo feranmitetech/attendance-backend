@@ -102,6 +102,31 @@ export async function sendLateAlert(student, time) {
   return sendSMS(student, message)
 }
 
+export async function sendCheckoutAlert(student, checkOutTime) {
+  const { data: school } = await supabase
+    .from('schools')
+    .select('termii_api_key, termii_sender_id, name')
+    .eq('id', student.school_id)
+    .single()
+
+  if (!school?.termii_api_key) return
+
+  const message = `AttendEase: ${student.name} has left school at ${checkOutTime}. If this was unexpected, please contact the school immediately.`
+
+  await fetch('https://api.ng.termii.com/api/sms/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to: student.parent_phone,
+      from: school.termii_sender_id || 'AttendEase',
+      sms: message,
+      type: 'plain',
+      channel: 'generic',
+      api_key: school.termii_api_key,
+    }),
+  })
+}
+
 export async function sendCustomAlert(student, message) {
   return sendSMS(student, message)
 }
