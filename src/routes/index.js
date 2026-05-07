@@ -155,12 +155,12 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
     const schoolId = req.user.school_id
     const targetId = req.params.id
 
-    // Prevent admin from deleting their own account
+    // Prevent self-deletion
     if (targetId === req.user.id) {
       return res.status(400).json({ error: 'You cannot delete your own account' })
     }
 
-    // Confirm the user belongs to this school before deleting
+    // Confirm target belongs to this school
     const { data: target, error: findError } = await supabase
       .from('users')
       .select('id, role')
@@ -169,17 +169,23 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
       .single()
 
     if (findError || !target) {
-      return res.status(404).json({ error: 'Staff account not found in your school' })
+      return res.status(404).json({ error: 'Staff account not found' })
     }
 
-    // Unassign from any classes they teach
+    // ✅ FIX: Null out recorded_by in attendance before deleting user
+    await supabase
+      .from('attendance')
+      .update({ recorded_by: null })
+      .eq('recorded_by', targetId)
+
+    // Unassign from classes
     await supabase
       .from('classes')
       .update({ teacher_id: null })
       .eq('teacher_id', targetId)
       .eq('school_id', schoolId)
 
-    // Delete the user
+    // Now safe to delete
     const { error } = await supabase
       .from('users')
       .delete()
@@ -194,30 +200,6 @@ router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) =
     return res.json({ message: 'Staff account removed successfully' })
   } catch (err) {
     console.error('Unexpected delete user error:', err)
-    return res.status(500).json({ error: err.message })
-  }
-})
-
-router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
-  try {
-    // First unassign teacher from any classes they teach
-    await supabase
-      .from('classes')
-      .update({ teacher_id: null })
-      .eq('teacher_id', req.params.id)
-      .eq('school_id', req.user.school_id)
-
-    // Then delete the user
-    const { error } = await supabase
-      .from('users')
-      .delete()
-      .eq('id', req.params.id)
-      .eq('school_id', req.user.school_id)
-
-    if (error) return res.status(500).json({ error: error.message })
-    return res.json({ message: 'User removed' })
-  } catch (err) {
-    console.error('Delete user error:', err)
     return res.status(500).json({ error: err.message })
   }
 })
