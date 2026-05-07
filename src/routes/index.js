@@ -121,7 +121,6 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
     .from('users')
     .select('*', { count: 'exact', head: true })
     .eq('school_id', req.user.school_id)
-    .neq('id', req.user.id)
 
   if (staffCount >= limit) {
     return res.status(403).json({
@@ -150,23 +149,51 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   return res.status(201).json(data)
 })
 
+// ✅ SINGLE clean delete route — no duplicate
 router.delete('/users/:id', authenticate, authorize('admin'), async (req, res) => {
   try {
+    const schoolId = req.user.school_id
+    const targetId = req.params.id
+
+    // Prevent admin from deleting their own account
+    if (targetId === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account' })
+    }
+
+    // Confirm the user belongs to this school before deleting
+    const { data: target, error: findError } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('id', targetId)
+      .eq('school_id', schoolId)
+      .single()
+
+    if (findError || !target) {
+      return res.status(404).json({ error: 'Staff account not found in your school' })
+    }
+
+    // Unassign from any classes they teach
     await supabase
       .from('classes')
       .update({ teacher_id: null })
-      .eq('teacher_id', req.params.id)
-      .eq('school_id', req.user.school_id)
+      .eq('teacher_id', targetId)
+      .eq('school_id', schoolId)
 
+    // Delete the user
     const { error } = await supabase
       .from('users')
       .delete()
-      .eq('id', req.params.id)
-      .eq('school_id', req.user.school_id)
+      .eq('id', targetId)
+      .eq('school_id', schoolId)
 
-    if (error) return res.status(500).json({ error: error.message })
-    return res.json({ message: 'User removed' })
+    if (error) {
+      console.error('Delete user error:', error)
+      return res.status(500).json({ error: error.message })
+    }
+
+    return res.json({ message: 'Staff account removed successfully' })
   } catch (err) {
+    console.error('Unexpected delete user error:', err)
     return res.status(500).json({ error: err.message })
   }
 })
