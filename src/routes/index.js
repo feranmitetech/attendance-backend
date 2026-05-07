@@ -6,7 +6,7 @@ import { authenticate, authorize, checkSubscription } from '../middleware/auth.j
 
 import { register, login, me } from '../controllers/auth.controller.js'
 import { listStudents, getStudent, createStudent, updateStudent, getQRCode } from '../controllers/students.controller.js'
-import { checkin, markAbsent, listAttendance, summary } from '../controllers/attendance.controller.js'
+import { checkin, checkout, markAbsent, listAttendance, summary } from '../controllers/attendance.controller.js'
 import { listClasses, createClass, updateClass, deleteClass } from '../controllers/classes.controller.js'
 
 const router = Router()
@@ -67,6 +67,9 @@ router.delete('/students/:id', authenticate, authorize('admin'), async (req, res
 // ── Attendance ────────────────────────────────────────
 // Kiosk check-in (admin + teacher can trigger)
 router.post('/attendance/checkin', authenticate, checkSubscription, checkin)
+
+// ✅ NEW — checkout route
+router.post('/attendance/checkout', authenticate, checkSubscription, checkout)
 // Mark all no-shows as absent (admin only, triggered at 8:15 AM)
 router.post('/attendance/mark-absent', authenticate, checkSubscription, authorize('admin'), markAbsent)
 // View records
