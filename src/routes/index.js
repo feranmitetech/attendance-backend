@@ -1,5 +1,5 @@
 import express from 'express'
-import { initializePayment, webhook, getStatus, cancelSubscription } from '../controllers/payments.controller.js'
+import { initializePayment, webhook, getStatus, cancelSubscription, verifyPayment } from '../controllers/payments.controller.js'
 import { supabase } from '../config/supabase.js'
 import { Router } from 'express'
 import { authenticate, authorize, checkSubscription } from '../middleware/auth.js'
