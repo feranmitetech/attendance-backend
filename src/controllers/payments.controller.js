@@ -1,22 +1,31 @@
 import { supabase } from '../config/supabase.js'
 import crypto from 'crypto'
 
-const PLAN_CODES = {
-  starter_monthly: process.env.PAYSTACK_STARTER_PLAN,
-  growth_monthly: process.env.PAYSTACK_GROWTH_PLAN,
-  enterprise_monthly: process.env.PAYSTACK_ENTERPRISE_PLAN,
-  starter_term: process.env.PAYSTACK_STARTER_TERM_PLAN,
-  growth_term: process.env.PAYSTACK_GROWTH_TERM_PLAN,
-  enterprise_term: process.env.PAYSTACK_ENTERPRISE_TERM_PLAN,
+const PLAN_AMOUNTS = {
+  starter_monthly: 1500000,
+  growth_monthly: 3000000,
+  enterprise_monthly: 6000000,
+  starter_term: 3825000,
+  growth_term: 7650000,
+  enterprise_term: 15300000,
+}
+
+const PLAN_DURATIONS = {
+  starter_monthly: 30,
+  growth_monthly: 30,
+  enterprise_monthly: 30,
+  starter_term: 105,
+  growth_term: 105,
+  enterprise_term: 105,
 }
 
 const PLAN_NAMES = {
-  [process.env.PAYSTACK_STARTER_PLAN]: 'starter',
-  [process.env.PAYSTACK_GROWTH_PLAN]: 'growth',
-  [process.env.PAYSTACK_ENTERPRISE_PLAN]: 'enterprise',
-  [process.env.PAYSTACK_STARTER_TERM_PLAN]: 'starter',
-  [process.env.PAYSTACK_GROWTH_TERM_PLAN]: 'growth',
-  [process.env.PAYSTACK_ENTERPRISE_TERM_PLAN]: 'enterprise',
+  starter_monthly: 'starter',
+  growth_monthly: 'growth',
+  enterprise_monthly: 'enterprise',
+  starter_term: 'starter',
+  growth_term: 'growth',
+  enterprise_term: 'enterprise',
 }
 
 async function paystackRequest(path, method = 'GET', body = null) {
@@ -32,47 +41,37 @@ async function paystackRequest(path, method = 'GET', body = null) {
 }
 
 // POST /api/payments/initialize
-// Creates a Paystack subscription for the school
 export async function initializePayment(req, res) {
   const { plan } = req.body
   const schoolId = req.user.school_id
 
-  if (!PLAN_CODES[plan]) {
+  if (!PLAN_AMOUNTS[plan]) {
     return res.status(400).json({ error: 'Invalid plan selected' })
   }
 
-  // Get school and user details
   const { data: school } = await supabase
     .from('schools')
-    .select('name, contact_email, paystack_customer_code')
+    .select('name, contact_email')
     .eq('id', schoolId)
     .single()
 
   if (!school) return res.status(404).json({ error: 'School not found' })
 
-  const email = school.contact_email
-  const planCode = PLAN_CODES[plan]
+  // Generate unique reference
+  const reference = `ATT-${schoolId.slice(0, 8)}-${Date.now()}`
 
-  const AMOUNTS = {
-  starter_monthly: 1500000,
-  growth_monthly: 3000000,
-  enterprise_monthly: 6000000,
-  starter_term: 3825000,
-  growth_term: 7650000,
-  enterprise_term: 15300000,
-}
-  
-  // Initialize transaction with Paystack
+  // Initialize one-time transaction — no plan/subscription
   const response = await paystackRequest('/transaction/initialize', 'POST', {
-    email,
-    amount: AMOUNTS[plan] || 1500000,
-    plan: planCode,
+    email: school.contact_email,
+    amount: PLAN_AMOUNTS[plan],
+    reference,
     metadata: {
       school_id: schoolId,
       school_name: school.name,
       plan,
+      duration_days: PLAN_DURATIONS[plan],
     },
-    callback_url: `${process.env.FRONTEND_URL}/billing/success`,
+    callback_url: `${process.env.FRONTEND_URL}/billing/success?reference=${reference}`,
   })
 
   if (!response.status) {
@@ -86,9 +85,7 @@ export async function initializePayment(req, res) {
 }
 
 // POST /api/payments/webhook
-// Called by Paystack when payment events happen
 export async function webhook(req, res) {
-  // Verify the request is from Paystack
   const hash = crypto
     .createHmac('sha512', process.env.PAYSTACK_SECRET_KEY)
     .update(JSON.stringify(req.body))
@@ -102,25 +99,18 @@ export async function webhook(req, res) {
   console.log('Paystack webhook event:', event.event)
 
   if (event.event === 'charge.success') {
-    const { metadata, customer, plan } = event.data
+    const { metadata, customer } = event.data
     const schoolId = metadata?.school_id
-    const planName = PLAN_NAMES[plan?.plan_code] || 'starter'
+    const plan = metadata?.plan
+    const durationDays = metadata?.duration_days || 30
 
-    if (!schoolId) return res.sendStatus(200)
+    if (!schoolId || !plan) return res.sendStatus(200)
 
-   // In webhook charge.success handler
-    const isTermPlan = plan?.plan_code && [
-      process.env.PAYSTACK_STARTER_TERM_PLAN,
-      process.env.PAYSTACK_GROWTH_TERM_PLAN,
-      process.env.PAYSTACK_ENTERPRISE_TERM_PLAN
-    ].includes(plan.plan_code)
+    const planName = PLAN_NAMES[plan] || 'starter'
 
+    // Calculate subscription end date
     const subscriptionEnd = new Date()
-    if (isTermPlan) {
-      subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 3)
-    } else {
-      subscriptionEnd.setMonth(subscriptionEnd.getMonth() + 1)
-    }
+    subscriptionEnd.setDate(subscriptionEnd.getDate() + durationDays)
 
     await supabase
       .from('schools')
@@ -135,33 +125,13 @@ export async function webhook(req, res) {
       })
       .eq('id', schoolId)
 
-    console.log(`School ${schoolId} activated on ${planName} plan`)
-  }
-
-  if (event.event === 'subscription.disable' || event.event === 'invoice.payment_failed') {
-    const schoolId = event.data?.metadata?.school_id
-    if (!schoolId) return res.sendStatus(200)
-
-    // Give 3 day grace period
-    const graceEnd = new Date()
-    graceEnd.setDate(graceEnd.getDate() + 3)
-
-    await supabase
-      .from('schools')
-      .update({
-        status: 'trial',
-        trial_ends_at: graceEnd.toISOString(),
-      })
-      .eq('id', schoolId)
-
-    console.log(`School ${schoolId} subscription failed — grace period started`)
+    console.log(`School ${schoolId} activated on ${planName} plan for ${durationDays} days`)
   }
 
   return res.sendStatus(200)
 }
 
 // GET /api/payments/status
-// Returns current subscription status for the school
 export async function getStatus(req, res) {
   const { data: school } = await supabase
     .from('schools')
@@ -175,34 +145,64 @@ export async function getStatus(req, res) {
     ? Math.max(0, Math.ceil((new Date(school.trial_ends_at) - new Date()) / (1000 * 60 * 60 * 24)))
     : 0
 
+  const subscriptionDaysLeft = school.subscription_end_at
+    ? Math.max(0, Math.ceil((new Date(school.subscription_end_at) - new Date()) / (1000 * 60 * 60 * 24)))
+    : 0
+
   return res.json({
     plan: school.plan || 'trial',
     status: school.status || 'trial',
     trial_days_left: trialDaysLeft,
+    subscription_days_left: subscriptionDaysLeft,
     subscription_end_at: school.subscription_end_at,
     billing_email: school.billing_email,
   })
 }
 
-// POST /api/payments/cancel
-// Cancels the school's Paystack subscription
-export async function cancelSubscription(req, res) {
-  const { data: school } = await supabase
-    .from('schools')
-    .select('paystack_subscription_code')
-    .eq('id', req.user.school_id)
-    .single()
+// POST /api/payments/verify
+// Called after redirect from Paystack to verify payment
+export async function verifyPayment(req, res) {
+  const { reference } = req.body
 
-  if (school?.paystack_subscription_code) {
-    await paystackRequest(
-      `/subscription/disable`,
-      'POST',
-      {
-        code: school.paystack_subscription_code,
-        token: school.paystack_subscription_code,
-      }
-    )
+  if (!reference) return res.status(400).json({ error: 'Reference is required' })
+
+  const response = await paystackRequest(`/transaction/verify/${reference}`)
+
+  if (!response.status || response.data?.status !== 'success') {
+    return res.status(400).json({ error: 'Payment not successful' })
   }
 
+  const { metadata, customer } = response.data
+  const schoolId = metadata?.school_id
+  const plan = metadata?.plan
+  const durationDays = metadata?.duration_days || 30
+
+  if (!schoolId) return res.status(400).json({ error: 'Invalid payment metadata' })
+
+  const planName = PLAN_NAMES[plan] || 'starter'
+  const subscriptionEnd = new Date()
+  subscriptionEnd.setDate(subscriptionEnd.getDate() + durationDays)
+
+  await supabase
+    .from('schools')
+    .update({
+      plan: planName,
+      status: 'active',
+      paystack_customer_code: customer?.customer_code,
+      subscription_start_at: new Date().toISOString(),
+      subscription_end_at: subscriptionEnd.toISOString(),
+      trial_ends_at: null,
+      billing_email: customer?.email,
+    })
+    .eq('id', schoolId)
+
+  return res.json({
+    message: 'Payment verified and subscription activated',
+    plan: planName,
+    subscription_end_at: subscriptionEnd.toISOString(),
+  })
+}
+
+export async function cancelSubscription(req, res) {
   return res.json({ message: 'Subscription cancelled' })
 }
