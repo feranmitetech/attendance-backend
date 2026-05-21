@@ -116,3 +116,13 @@ export async function sendCheckoutAlert(student, checkOutTime) {
 export async function sendCustomAlert(student, message) {
   return sendSMS(student, message)
 }
+
+export async function sendCheckinAlert(student, checkInTime) {
+  const today = new Date().toLocaleDateString('en-NG', {
+    day: 'numeric', month: 'long', year: 'numeric',
+    timeZone: 'Africa/Lagos',
+  })
+  const message =
+    `Dear Parent, your ward ${student.name} has arrived at school at ${checkInTime} on ${today}. Thank you.`
+  return sendSMS(student, message)
+}
