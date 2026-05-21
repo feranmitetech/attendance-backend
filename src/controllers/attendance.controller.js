@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase.js'
-import { sendAbsenceAlert, sendLateAlert, sendCheckoutAlert } from '../services/sms.service.js'
+import { sendAbsenceAlert, sendLateAlert, sendCheckoutAlert, sendCheckinAlert } from '../services/sms.service.js'
 import { z } from 'zod'
 
 const checkinSchema = z.object({
@@ -41,7 +41,7 @@ export async function checkin(req, res) {
   const schoolId = req.user.school_id
   const today = new Date().toISOString().split('T')[0]
   const now = getNigeriaTime()
-  
+
   // Resolve student from QR code or direct ID
   let student
   if (method === 'qr' && qr_code) {
@@ -103,9 +103,11 @@ export async function checkin(req, res) {
 
   if (error) return res.status(500).json({ error: error.message })
 
-  // Send SMS if late (non-blocking — we don't await this)
-  if (computedStatus === 'late') {
+  // Send SMS for every check-in (non-blocking)
+if (computedStatus === 'late') {
   sendLateAlert({ ...student, school_id: schoolId }, now).catch(console.error)
+} else if (computedStatus === 'present') {
+  sendCheckinAlert({ ...student, school_id: schoolId }, now).catch(console.error)
 }
 
   return res.status(201).json({
