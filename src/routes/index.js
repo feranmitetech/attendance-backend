@@ -242,6 +242,7 @@ router.post('/payments/webhook', express.raw({ type: 'application/json' }), webh
 router.post('/payments/initialize', authenticate, checkSubscription, initializePayment)
 router.get('/payments/status', authenticate, getStatus)
 router.post('/payments/cancel', authenticate, authorize('admin'), cancelSubscription)
+router.post('/payments/verify', authenticate, verifyPayment)
 
 // Change password
 router.patch('/auth/change-password', authenticate, async (req, res) => {
