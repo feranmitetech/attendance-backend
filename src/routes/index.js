@@ -239,7 +239,7 @@ router.patch('/settings', authenticate, authorize('admin'), async (req, res) => 
 // ── Payments ──────────────────────────────────────────
 // Webhook must use raw body — add before other payment routes
 router.post('/payments/webhook', express.raw({ type: 'application/json' }), webhook)
-router.post('/payments/initialize', authenticate, checkSubscription, initializePayment)
+router.post('/payments/initialize', authenticate, initializePayment)
 router.get('/payments/status', authenticate, getStatus)
 router.post('/payments/cancel', authenticate, authorize('admin'), cancelSubscription)
 router.post('/payments/verify', authenticate, verifyPayment)
