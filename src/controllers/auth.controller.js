@@ -138,6 +138,7 @@ function signToken(user, school) {
       school_id: school.id,
       role: user.role,
       name: user.name,
+      plan: school.plan || 'trial',
     },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
