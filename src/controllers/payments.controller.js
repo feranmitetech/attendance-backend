@@ -99,35 +99,36 @@ export async function webhook(req, res) {
   console.log('Paystack webhook event:', event.event)
 
   if (event.event === 'charge.success') {
-    const { metadata, customer } = event.data
-    const schoolId = metadata?.school_id
-    const plan = metadata?.plan
-    const durationDays = metadata?.duration_days || 30
+  const { metadata, customer } = event.data
+  const schoolId = metadata?.school_id
+  const plan = metadata?.plan
 
-    if (!schoolId || !plan) return res.sendStatus(200)
+  if (!schoolId || !plan) return res.sendStatus(200)
 
-    const planName = PLAN_NAMES[plan] || 'starter'
+  const planName = PLAN_NAMES[plan] || 'starter'
 
-    // Calculate subscription end date
-    const subscriptionEnd = new Date()
-    subscriptionEnd.setDate(subscriptionEnd.getDate() + durationDays)
+  // Calculate duration from plan name directly — never trust metadata for this
+  const durationDays = plan.includes('term') ? 105 : 30
 
-    await supabase
-      .from('schools')
-      .update({
-        plan: planName,
-        status: 'active',
-        paystack_customer_code: customer?.customer_code,
-        subscription_start_at: new Date().toISOString(),
-        subscription_end_at: subscriptionEnd.toISOString(),
-        trial_ends_at: null,
-        billing_email: customer?.email,
-      })
-      .eq('id', schoolId)
+  const subscriptionEnd = new Date()
+  subscriptionEnd.setDate(subscriptionEnd.getDate() + durationDays)
 
-    console.log(`School ${schoolId} activated on ${planName} plan for ${durationDays} days`)
-  }
+  await supabase
+    .from('schools')
+    .update({
+      plan: planName,
+      status: 'active',
+      paystack_customer_code: customer?.customer_code,
+      subscription_start_at: new Date().toISOString(),
+      subscription_end_at: subscriptionEnd.toISOString(),
+      trial_ends_at: null,
+      billing_email: customer?.email,
+    })
+    .eq('id', schoolId)
 
+  console.log(`School ${schoolId} activated on ${planName} plan for ${durationDays} days`)
+}
+  
   return res.sendStatus(200)
 }
 
