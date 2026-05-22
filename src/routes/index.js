@@ -108,7 +108,7 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
   }
 
   const STAFF_LIMITS = {
-    trial: 2, starter: 3, growth: 10, enterprise: Infinity
+    trial: 2, starter: 3, growth: 10, enterprise: 99999
   }
 
   const { data: school } = await supabase
@@ -124,6 +124,7 @@ router.post('/users', authenticate, authorize('admin'), async (req, res) => {
     .from('users')
     .select('*', { count: 'exact', head: true })
     .eq('school_id', req.user.school_id)
+    .neq('role', 'admin')
 
   if (staffCount >= limit) {
     return res.status(403).json({
