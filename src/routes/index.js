@@ -317,8 +317,6 @@ router.post('/auth/forgot-password', async (req, res) => {
 
   console.log(`Password reset link for ${email}: ${resetUrl}`)
 
-  // For now log the URL — we'll add email sending next
-  // TODO: Send email with resetUrl
 
   return res.json({ message: 'If this email exists you will receive a reset link', resetUrl })
 })
