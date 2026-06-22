@@ -48,6 +48,7 @@ const { data: school, error: schoolError } = await supabase
     subdomain, 
     contact_email: email,
     trial_ends_at: trialEndsAt.toISOString(),
+    plan: 'trial',
     status: 'trial'
   })
   .select()
