@@ -213,13 +213,16 @@ export async function summary(req, res) {
 
   const counts = { present: 0, absent: 0, late: 0 }
   records?.forEach(r => { if (counts[r.status] !== undefined) counts[r.status]++ })
+  const physicallyPresent = counts.present + counts.late
 
   return res.json({
     date: today,
     total: total || 0,
-    ...counts,
+    present: physicallyPresent,
+    absent: counts.absent,
+    late: counts.late,
     not_yet_recorded: (total || 0) - records?.length,
-    percentage: total ? Math.round(((counts.present + counts.late) / total) * 100) : 0,
+    percentage: total ? Math.round((physicallyPresent / total) * 100) : 0,
   })
 }
 
