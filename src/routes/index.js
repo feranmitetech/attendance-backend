@@ -258,11 +258,16 @@ router.patch('/auth/change-password', authenticate, async (req, res) => {
   }
 
   // Get user with password hash
-  const { data: user } = await supabase
+  const { data: user, error: userError } = await supabase
     .from('users')
-    .select('password_hash')
+    .select('id, email, password_hash')
     .eq('id', req.user.id)
     .single()
+
+  if (userError) {
+    console.error('Change password user lookup failed:', userError.message)
+    return res.status(500).json({ error: 'Unable to change password. Please try again.' })
+  }
 
   if (!user) return res.status(404).json({ error: 'User not found' })
 
@@ -274,13 +279,31 @@ router.patch('/auth/change-password', authenticate, async (req, res) => {
     return res.status(401).json({ error: 'Current password is incorrect' })
   }
 
+  const unchanged = await bcrypt.default.compare(new_password, user.password_hash)
+  if (unchanged) {
+    return res.status(400).json({ error: 'New password must be different from the current password' })
+  }
+
   // Hash new password
   const newHash = await bcrypt.default.hash(new_password, 12)
 
-  await supabase
+  const { data: updatedUser, error: updateError } = await supabase
     .from('users')
     .update({ password_hash: newHash })
     .eq('id', req.user.id)
+    .select('id, password_hash')
+    .single()
+
+  if (updateError || !updatedUser) {
+    console.error('Change password update failed:', updateError?.message || 'No updated user returned')
+    return res.status(500).json({ error: 'Password was not changed. Please try again.' })
+  }
+
+  const savedCorrectly = await bcrypt.default.compare(new_password, updatedUser.password_hash)
+  if (!savedCorrectly) {
+    console.error('Change password verification failed for user:', req.user.id)
+    return res.status(500).json({ error: 'Password could not be verified after saving. Please try again.' })
+  }
 
   return res.json({ message: 'Password changed successfully' })
 })
